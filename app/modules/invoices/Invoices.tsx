@@ -39,7 +39,7 @@ function newRow(): LineItem {
     rowId: `row_${Math.random().toString(36).slice(2, 9)}`,
     description: "",
     inventoryId: "",
-    quantity: 1,
+    quantity: 0,
     unitPrice: 0
   };
 }
@@ -56,7 +56,7 @@ export function Invoices({ data, reload }: InvoicesProps) {
     customerId: data.customers[0]?.id || "",
     customerName: data.customers[0]?.name || "",
     dueDate: new Date().toISOString().slice(0, 10),
-    taxRate: 7.5,
+    taxRate: 0,
     status: "Sent"
   });
   const [lines, setLines] = useState<LineItem[]>([newRow()]);
@@ -167,7 +167,7 @@ export function Invoices({ data, reload }: InvoicesProps) {
       customerId: data.customers[0]?.id || "",
       customerName: data.customers[0]?.name || "",
       dueDate: new Date().toISOString().slice(0, 10),
-      taxRate: 7.5,
+      taxRate: 0,
       status: "Sent"
     });
     setLines([newRow()]);

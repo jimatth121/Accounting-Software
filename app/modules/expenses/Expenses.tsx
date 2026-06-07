@@ -46,7 +46,7 @@ export function Expenses({ data, reload, currency }: ExpensesProps) {
   const [form, setForm] = useState({
     vendorId: data.vendors[0]?.id || "",
     expenseDate: new Date().toISOString().slice(0, 10),
-    amount: 25000,
+    amount: 0,
     taxAmount: 0,
     category: "Software/Hosting",
     paymentMethod: "Card",

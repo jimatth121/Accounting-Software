@@ -35,7 +35,7 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
   const [form, setForm] = useState({
     paymentType: "incoming",
     invoiceId: data.invoices[0]?.id || "",
-    amount: 50000,
+    amount: 0,
     paymentMethod: "Bank transfer",
     reference: "",
     notes: ""

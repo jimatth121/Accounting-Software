@@ -38,12 +38,12 @@ function newRow(): LineItem {
     rowId: `row_${Math.random().toString(36).slice(2, 9)}`,
     description: "",
     inventoryId: "",
-    quantity: 1,
+    quantity: 0,
     unitPrice: 0
   };
 }
 
-const DEFAULT_TAX = 7.5;
+const DEFAULT_TAX = 0;
 
 export function QuickSale({ data, reload, currency }: QuickSaleProps) {
   const customers = data.customers || [];

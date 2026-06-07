@@ -31,7 +31,7 @@ const blank = {
   name: "",
   category: "General",
   quantity: 0,
-  reorderLevel: 5,
+  reorderLevel: 0,
   unitCost: 0,
   unitPrice: 0
 };
