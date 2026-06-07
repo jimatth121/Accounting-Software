@@ -16,11 +16,21 @@ interface CompanyProps {
 
 export function Company({ data, reload }: CompanyProps) {
   const [form, setForm] = useState<CompanyType>(data.company || {});
+  const [busy, setBusy] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    await api("/api/company", { method: "PATCH", body: JSON.stringify(form) });
-    reload();
+    setBusy(true);
+    try {
+      await api("/api/company", {
+        method: "PATCH",
+        body: JSON.stringify(form),
+        successMessage: "Company profile saved"
+      });
+      reload();
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -41,7 +51,7 @@ export function Company({ data, reload }: CompanyProps) {
         <Input label="Tax ID" value={form.taxId} onChange={(taxId) => setForm({ ...form, taxId })} />
         <Input label="Fiscal year start" value={form.fiscalYearStartMonth} onChange={(fiscalYearStartMonth) => setForm({ ...form, fiscalYearStartMonth })} />
         <div className="col-span-full mt-1 flex justify-end">
-          <Button type="submit">Save company</Button>
+          <Button type="submit" loading={busy}>Save company</Button>
         </div>
       </form>
     </Panel>

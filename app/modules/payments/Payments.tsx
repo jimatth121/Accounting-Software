@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { DataTable } from "@/components/DataTable";
@@ -9,19 +9,23 @@ import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel } from "@/components/Panel";
 import { Select } from "@/components/forms/Select";
+import { DocumentView, type DocPayload } from "@/components/DocumentView";
+import { TableToolbar } from "@/components/TableToolbar";
+import { DatePicker } from "@/components/forms/DatePicker";
 import { api } from "@/lib/api";
 import { PAYMENT_METHODS } from "@/lib/constants";
-import type { Column, Invoice, Payment } from "@/lib/types";
+import type { Column, Company, Invoice, Payment } from "@/lib/types";
 import { formatDate, money } from "@/lib/utils";
 
 interface PaymentsProps {
-  data: { payments: Payment[]; invoices: Invoice[] };
+  data: { payments: Payment[]; invoices: Invoice[]; company?: Company | null };
   reload: () => void;
   currency: string;
 }
 
 export function Payments({ data, reload, currency }: PaymentsProps) {
   const [open, setOpen] = useState(false);
+  const [viewing, setViewing] = useState<DocPayload | null>(null);
   const [form, setForm] = useState({
     paymentType: "incoming",
     invoiceId: data.invoices[0]?.id || "",
@@ -30,16 +34,94 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
     reference: "",
     notes: ""
   });
+  const [editing, setEditing] = useState<Payment | null>(null);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [busyRow, setBusyRow] = useState<string>("");
+
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [methodFilter, setMethodFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return data.payments.filter((row) => {
+      if (typeFilter !== "all" && row.paymentType !== typeFilter) return false;
+      if (methodFilter !== "all" && row.paymentMethod !== methodFilter) return false;
+      const when = row.paymentDate || row.createdAt || "";
+      if (dateFrom && when < dateFrom) return false;
+      if (dateTo && when > dateTo) return false;
+      if (term) {
+        const blob = `${row.reference || ""} ${row.notes || ""} ${row.paymentMethod || ""}`.toLowerCase();
+        if (!blob.includes(term)) return false;
+      }
+      return true;
+    });
+  }, [data.payments, search, typeFilter, methodFilter, dateFrom, dateTo]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (form.invoiceId) {
-      await api(`/api/invoices/${form.invoiceId}/mark-paid`, { method: "POST", body: JSON.stringify(form) });
-    } else {
-      await api("/api/payments", { method: "POST", body: JSON.stringify(form) });
+    setCreateBusy(true);
+    try {
+      if (form.invoiceId) {
+        await api(`/api/invoices/${form.invoiceId}/mark-paid`, {
+          method: "POST",
+          body: JSON.stringify(form),
+          successMessage: "Payment applied to invoice"
+        });
+      } else {
+        await api("/api/payments", {
+          method: "POST",
+          body: JSON.stringify(form),
+          successMessage: "Payment recorded"
+        });
+      }
+      setOpen(false);
+      reload();
+    } finally {
+      setCreateBusy(false);
     }
-    setOpen(false);
-    reload();
+  }
+
+  async function saveEdit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editing) return;
+    setEditBusy(true);
+    try {
+      await api(`/api/payments/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          amount: editing.amount,
+          paymentMethod: editing.paymentMethod,
+          reference: editing.reference,
+          notes: editing.notes,
+          paymentDate: editing.paymentDate
+        }),
+        successMessage: "Payment updated",
+        successDetail: editing.reference || undefined
+      });
+      setEditing(null);
+      reload();
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function remove(id: string, reference: string) {
+    if (!confirm("Delete this payment? Linked invoice balances will be restored.")) return;
+    setBusyRow(`${id}:delete`);
+    try {
+      await api(`/api/payments/${id}`, {
+        method: "DELETE",
+        successMessage: "Payment deleted",
+        successDetail: reference || undefined
+      });
+      reload();
+    } finally {
+      setBusyRow("");
+    }
   }
 
   const columns: Column<Payment>[] = [
@@ -52,7 +134,31 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
     { key: "paymentMethod", label: "Method" },
     { key: "reference", label: "Reference", render: (row) => row.reference || <span className="text-slate-400">—</span> },
     { key: "notes", label: "Notes", render: (row) => row.notes || <span className="text-slate-400">—</span> },
-    { key: "amount", label: "Amount", align: "right", render: (row) => money(row.amount, row.currency || currency) }
+    { key: "amount", label: "Amount", align: "right", render: (row) => money(row.amount, row.currency || currency) },
+    {
+      key: "actions",
+      label: "",
+      render: (row) => (
+        <div className="inline-flex gap-2">
+          <Button
+            variant="small"
+            type="button"
+            onClick={() => setViewing({ kind: "payment", record: row, invoice: data.invoices.find((item) => item.id === row.invoiceId) })}
+          >
+            View
+          </Button>
+          <Button variant="small" type="button" onClick={() => setEditing(row)}>Edit</Button>
+          <Button
+            variant="smallDanger"
+            type="button"
+            loading={busyRow === `${row.id}:delete`}
+            onClick={() => remove(row.id, row.reference || "")}
+          >
+            Delete
+          </Button>
+        </div>
+      )
+    }
   ];
 
   return (
@@ -64,7 +170,37 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
         actionLabel="Record payment"
         onAction={() => setOpen(true)}
       />
-      <DataTable columns={columns} rows={data.payments.map((row) => ({ ...row, _key: row.id }))} empty="No payments yet" />
+      <div className="mb-3 grid gap-3 sm:grid-cols-2">
+        <DatePicker label="From date" value={dateFrom} onChange={setDateFrom} placeholder="Any start date" />
+        <DatePicker label="To date" value={dateTo} onChange={setDateTo} placeholder="Any end date" />
+      </div>
+      <TableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        placeholder="Search reference, notes or method…"
+        resultCount={filtered.length}
+        totalCount={data.payments.length}
+        filters={[
+          {
+            key: "type",
+            label: "Type",
+            value: typeFilter,
+            onChange: setTypeFilter,
+            options: [
+              { label: "Incoming", value: "incoming" },
+              { label: "Outgoing", value: "outgoing" }
+            ]
+          },
+          {
+            key: "method",
+            label: "Method",
+            value: methodFilter,
+            onChange: setMethodFilter,
+            options: PAYMENT_METHODS.map((value) => ({ label: value, value }))
+          }
+        ]}
+      />
+      <DataTable columns={columns} rows={filtered.map((row) => ({ ...row, _key: row.id }))} empty="No payments match the current filters." />
 
       <Modal
         open={open}
@@ -73,8 +209,8 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
         subtitle="Apply a payment against an invoice"
         footer={
           <>
-            <Button variant="secondary" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" form="payment-form">Save payment</Button>
+            <Button variant="secondary" type="button" onClick={() => setOpen(false)} disabled={createBusy}>Cancel</Button>
+            <Button type="submit" form="payment-form" loading={createBusy}>Save payment</Button>
           </>
         }
       >
@@ -98,6 +234,38 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
           </div>
         </form>
       </Modal>
+
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title="Edit payment"
+        subtitle={editing?.reference || ""}
+        footer={
+          <>
+            <Button variant="secondary" type="button" onClick={() => setEditing(null)} disabled={editBusy}>Cancel</Button>
+            <Button type="submit" form="payment-edit-form" loading={editBusy}>Save changes</Button>
+          </>
+        }
+      >
+        {editing ? (
+          <form id="payment-edit-form" className="grid gap-4 sm:grid-cols-2" onSubmit={saveEdit}>
+            <Input label="Amount" type="number" value={editing.amount} onChange={(amount) => setEditing({ ...editing, amount: Number(amount) })} />
+            <Input label="Date" type="date" value={editing.paymentDate || ""} onChange={(paymentDate) => setEditing({ ...editing, paymentDate })} />
+            <Select
+              label="Payment method"
+              value={editing.paymentMethod}
+              onChange={(paymentMethod) => setEditing({ ...editing, paymentMethod })}
+              options={PAYMENT_METHODS}
+            />
+            <Input label="Reference" value={editing.reference || ""} onChange={(reference) => setEditing({ ...editing, reference })} />
+            <div className="col-span-full">
+              <Input label="Notes" value={editing.notes || ""} onChange={(notes) => setEditing({ ...editing, notes })} />
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
+      <DocumentView doc={viewing} onClose={() => setViewing(null)} company={data.company ?? null} currency={currency} />
     </Panel>
   );
 }

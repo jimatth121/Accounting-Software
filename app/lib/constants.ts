@@ -1,3 +1,16 @@
+import {
+  Banknote,
+  BookOpen,
+  Building2,
+  FileText,
+  LayoutDashboard,
+  Package,
+  ReceiptText,
+  PieChart,
+  Sparkles,
+  Truck,
+  Users
+} from "lucide-react";
 import type { AppData, NavItem } from "./types";
 
 export const CHART_COLORS = [
@@ -12,16 +25,17 @@ export const CHART_COLORS = [
 ];
 
 export const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", icon: "▦" },
-  { label: "Company", icon: "◈" },
-  { label: "Customers", icon: "◉" },
-  { label: "Vendors", icon: "◎" },
-  { label: "Invoices", icon: "▤" },
-  { label: "Expenses", icon: "▽" },
-  { label: "Payments", icon: "₦" },
-  { label: "Inventory", icon: "▣" },
-  { label: "Reports", icon: "◍" },
-  { label: "AI Assistant", icon: "✦" }
+  { label: "Dashboard", icon: LayoutDashboard },
+  { label: "Inventory", icon: Package },
+  { label: "Company", icon: Building2 },
+  { label: "Customers", icon: Users },
+  { label: "Vendors", icon: Truck },
+  { label: "Invoices", icon: FileText },
+  { label: "Expenses", icon: ReceiptText },
+  { label: "Payments", icon: Banknote },
+  { label: "Ledger", icon: BookOpen },
+  { label: "Reports", icon: PieChart },
+  { label: "AI Assistant", icon: Sparkles }
 ];
 
 export const PAYMENT_METHODS = [
@@ -54,7 +68,31 @@ export const EMPTY_STATE: AppData = {
   expenses: [],
   payments: [],
   accounts: [],
+  inventory: [],
+  preferences: null,
+  members: [],
+  permissions: null,
+  currentMember: null,
+  workspaceUserId: null,
   dashboard: null,
   reports: null,
   anomalies: []
+};
+
+export const ROLES = ["Administrator", "Accountant", "Member", "Viewer"];
+export const PERMISSION_ACTIONS: ("read" | "write" | "delete")[] = ["read", "write", "delete"];
+
+export const DEFAULT_PREFERENCES = {
+  notifications: {
+    invoiceReminders: true,
+    paymentReceived: true,
+    overdueAlerts: true,
+    weeklyDigest: false,
+    productUpdates: false,
+    emailMarketing: false
+  },
+  theme: "light",
+  language: "English",
+  dateFormat: "DD MMM YYYY",
+  autoBackup: true
 };

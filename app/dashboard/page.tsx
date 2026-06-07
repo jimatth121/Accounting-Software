@@ -4,10 +4,11 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { Notice } from "@/components/Notice";
 import { Sidebar } from "@/components/Sidebar";
+import { Toaster } from "@/components/Toaster";
 import { Topbar } from "@/components/Topbar";
 import { api, setAuthContext } from "@/lib/api";
 import { EMPTY_STATE } from "@/lib/constants";
-import type { AppData, InventoryItem, NavLabel } from "@/lib/types";
+import type { AppData, NavLabel } from "@/lib/types";
 import { AIAssistant } from "@/modules/ai-assistant/AIAssistant";
 import { Company } from "@/modules/company/Company";
 import { Customers } from "@/modules/customers/Customers";
@@ -15,6 +16,7 @@ import { Dashboard } from "@/modules/dashboard/Dashboard";
 import { Expenses } from "@/modules/expenses/Expenses";
 import { Inventory } from "@/modules/inventory/Inventory";
 import { Invoices } from "@/modules/invoices/Invoices";
+import { Ledger } from "@/modules/ledger/Ledger";
 import { Payments } from "@/modules/payments/Payments";
 import { Reports } from "@/modules/reports/Reports";
 import { Settings } from "@/modules/settings/Settings";
@@ -28,7 +30,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [navOpen, setNavOpen] = useState(false);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
 
   async function loadData() {
     try {
@@ -74,16 +75,19 @@ export default function Home() {
   }
 
   return (
-    <main className="grid min-h-screen md:grid-cols-[260px_1fr]">
-      <Sidebar
-        active={active}
-        onSelect={setActive}
-        open={navOpen}
-        onClose={() => setNavOpen(false)}
-        companyName={data.company?.name}
-      />
+    <main className="md:flex md:h-screen md:overflow-hidden">
+      <Toaster />
+      <div className="md:w-[260px] md:h-full md:shrink-0">
+        <Sidebar
+          active={active}
+          onSelect={setActive}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
+          companyName={data.company?.name}
+        />
+      </div>
 
-      <section className="grid gap-5 px-4 py-5 md:px-7 md:py-6 min-w-0">
+      <section className="grid content-start gap-5 px-4 py-5 md:px-7 md:py-6 min-w-0 md:flex-1 md:overflow-y-auto">
         <Topbar
           section={active}
           companyName={data.company?.name}
@@ -95,14 +99,15 @@ export default function Home() {
         {error ? <Notice>{error}</Notice> : null}
         {loading ? <Notice tone="info">Loading SmartBooks AI...</Notice> : null}
 
-        {!loading && active === "Dashboard" ? <Dashboard data={data} currency={currency} /> : null}
+        {!loading && active === "Dashboard" ? <Dashboard data={data} currency={currency} reload={loadData} /> : null}
         {!loading && active === "Company" ? <Company data={data} reload={loadData} /> : null}
         {!loading && active === "Customers" ? <Customers data={data} reload={loadData} /> : null}
         {!loading && active === "Vendors" ? <Vendors data={data} reload={loadData} /> : null}
         {!loading && active === "Invoices" ? <Invoices data={data} reload={loadData} /> : null}
         {!loading && active === "Expenses" ? <Expenses data={data} reload={loadData} currency={currency} /> : null}
         {!loading && active === "Payments" ? <Payments data={data} reload={loadData} currency={currency} /> : null}
-        {!loading && active === "Inventory" ? <Inventory inventory={inventory} setInventory={setInventory} currency={currency} /> : null}
+        {!loading && active === "Inventory" ? <Inventory data={data} reload={loadData} currency={currency} /> : null}
+        {!loading && active === "Ledger" ? <Ledger data={data} currency={currency} /> : null}
         {!loading && active === "Reports" ? <Reports data={data} currency={currency} /> : null}
         {!loading && active === "AI Assistant" ? <AIAssistant data={data} /> : null}
         {!loading && active === "Settings" ? <Settings data={data} reload={loadData} /> : null}

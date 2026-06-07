@@ -1,3 +1,5 @@
+import type { LucideIcon } from "lucide-react";
+
 export interface Company {
   id?: string;
   name?: string;
@@ -21,6 +23,15 @@ export interface Party {
   notes?: string;
 }
 
+export interface InvoiceLineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  taxRate?: number;
+  discountAmount?: number;
+  inventoryId?: string | null;
+}
+
 export interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -32,6 +43,13 @@ export interface Invoice {
   balanceDue: number;
   currency?: string;
   status: string;
+  items?: InvoiceLineItem[];
+  subtotal?: number;
+  taxAmount?: number;
+  discountAmount?: number;
+  amountPaid?: number;
+  notes?: string;
+  terms?: string;
 }
 
 export interface Expense {
@@ -105,6 +123,70 @@ export interface InventoryItem {
   unitPrice: number;
 }
 
+export interface NotificationPrefs {
+  invoiceReminders: boolean;
+  paymentReceived: boolean;
+  overdueAlerts: boolean;
+  weeklyDigest: boolean;
+  productUpdates: boolean;
+  emailMarketing: boolean;
+}
+
+export interface Preferences {
+  notifications: NotificationPrefs;
+  theme: string;
+  language: string;
+  dateFormat: string;
+  autoBackup: boolean;
+}
+
+export type Role = "Administrator" | "Accountant" | "Member" | "Viewer";
+
+export type PermissionAction = "read" | "write" | "delete";
+
+export interface PermissionCell {
+  read: boolean;
+  write: boolean;
+  delete: boolean;
+}
+
+export type PermissionMatrix = Record<string, Record<string, PermissionCell>>;
+
+export interface Permissions {
+  roles: string[];
+  modules: string[];
+  actions: PermissionAction[];
+  matrix: PermissionMatrix;
+}
+
+export interface Member {
+  id: string;
+  name: string;
+  email: string;
+  role: Role | string;
+  status: "active" | "pending" | "suspended" | string;
+  clerkUserId?: string;
+  isOwner?: boolean;
+  invitedAt?: string;
+  joinedAt?: string | null;
+  clerkInvitationId?: string | null;
+  inviteEmailSent?: boolean;
+  inviteUrl?: string;
+}
+
+export interface InvitationResult {
+  member: Member;
+  invitation: {
+    mode: "clerk" | "manual" | "already_exists" | "noop";
+    emailSent: boolean;
+    status: string;
+    url: string;
+    errorCode: string | null;
+    error: string | null;
+  };
+  clerkConfigured: boolean;
+}
+
 export interface AppData {
   company: Company | null;
   customers: Party[];
@@ -113,9 +195,42 @@ export interface AppData {
   expenses: Expense[];
   payments: Payment[];
   accounts: Account[];
+  inventory: InventoryItem[];
+  preferences: Preferences | null;
+  members: Member[];
+  permissions: Permissions | null;
+  currentMember: Member | null;
+  workspaceUserId: string | null;
   dashboard: DashboardSummary | null;
   reports: Reports | null;
   anomalies: Anomaly[];
+}
+
+export interface LedgerEntry {
+  id: string;
+  transactionId: string;
+  date: string;
+  description: string;
+  reference: string;
+  debit: number;
+  credit: number;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  accountType: string;
+  runningBalance: number;
+}
+
+export interface LedgerSummary {
+  totalDebits: number;
+  totalCredits: number;
+  netChange: number;
+  entryCount: number;
+}
+
+export interface LedgerResponse {
+  entries: LedgerEntry[];
+  summary: LedgerSummary;
 }
 
 export type NavLabel =
@@ -127,13 +242,14 @@ export type NavLabel =
   | "Expenses"
   | "Payments"
   | "Inventory"
+  | "Ledger"
   | "Reports"
   | "AI Assistant"
   | "Settings";
 
 export interface NavItem {
   label: NavLabel;
-  icon: string;
+  icon: LucideIcon;
 }
 
 export interface Column<T> {

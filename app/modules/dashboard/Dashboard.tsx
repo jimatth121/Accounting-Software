@@ -22,13 +22,15 @@ import { Panel } from "@/components/Panel";
 import { CHART_COLORS } from "@/lib/constants";
 import type { AppData } from "@/lib/types";
 import { formatDate, money } from "@/lib/utils";
+import { QuickSale } from "./QuickSale";
 
 interface DashboardProps {
   data: AppData;
   currency: string;
+  reload: () => void;
 }
 
-export function Dashboard({ data, currency }: DashboardProps) {
+export function Dashboard({ data, currency, reload }: DashboardProps) {
   const totalRevenue = data.dashboard?.totalRevenue || 0;
   const totalExpenses = data.dashboard?.totalExpenses || 0;
   const netProfit = data.dashboard?.netProfit || 0;
@@ -104,6 +106,9 @@ export function Dashboard({ data, currency }: DashboardProps) {
         <MetricCard label="Net profit" value={money(netProfit, currency)} delta={`${profitMargin}% margin`} trend="up" icon="✓" accent="emerald" />
         <MetricCard label="Outstanding" value={money(outstanding, currency)} delta={`${overdue} overdue`} trend="neutral" icon="⏱" accent="amber" />
       </section>
+
+      {/* Quick sale */}
+      <QuickSale data={data} reload={reload} currency={currency} />
 
       {/* Charts */}
       <section className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">

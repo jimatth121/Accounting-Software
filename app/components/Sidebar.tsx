@@ -18,8 +18,8 @@ export function Sidebar({ active, onSelect, open, onClose, companyName }: Sideba
       <aside
         className={clsx(
           "z-[100] flex flex-col gap-7 overflow-y-auto bg-gradient-to-b from-slate-900 via-brand-950 to-brand-900 px-4 py-6 text-white",
-          "md:sticky md:top-0 md:h-screen md:translate-x-0",
           "fixed top-0 left-0 h-screen w-[280px] transition-transform duration-200 shadow-2xl",
+          "md:relative md:w-full md:h-full md:shrink-0 md:translate-x-0 md:shadow-none",
           open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         )}
       >
@@ -36,6 +36,7 @@ export function Sidebar({ active, onSelect, open, onClose, companyName }: Sideba
         <nav className="grid gap-1">
           {NAV_ITEMS.map((item) => {
             const isActive = active === item.label;
+            const Icon = item.icon;
             return (
               <button
                 key={item.label}
@@ -53,13 +54,13 @@ export function Sidebar({ active, onSelect, open, onClose, companyName }: Sideba
               >
                 <span
                   className={clsx(
-                    "flex h-7 w-7 items-center justify-center rounded-lg text-sm",
+                    "flex h-7 w-7 items-center justify-center rounded-lg",
                     isActive
                       ? "bg-gradient-to-br from-cyan-500 to-fuchsia-500 shadow-lg shadow-cyan-500/40"
                       : "bg-white/10"
                   )}
                 >
-                  {item.icon}
+                  <Icon className="h-4 w-4" strokeWidth={2.25} />
                 </span>
                 {item.label}
               </button>

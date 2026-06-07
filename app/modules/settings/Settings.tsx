@@ -9,19 +9,30 @@ import { Panel } from "@/components/Panel";
 import { Select } from "@/components/forms/Select";
 import { Toggle } from "@/components/Toggle";
 import { api } from "@/lib/api";
-import type { Company } from "@/lib/types";
+import { DEFAULT_PREFERENCES } from "@/lib/constants";
+import type { Company, Member, NotificationPrefs, Permissions, Preferences } from "@/lib/types";
 import { clsx } from "@/lib/utils";
+import { TeamTab } from "./TeamTab";
+import { PermissionsTab } from "./PermissionsTab";
 
 interface SettingsProps {
-  data: { company: Company | null };
+  data: {
+    company: Company | null;
+    preferences: Preferences | null;
+    members: Member[];
+    permissions: Permissions | null;
+    currentMember: Member | null;
+  };
   reload: () => void;
 }
 
-type Tab = "profile" | "company" | "notifications" | "security" | "preferences";
+type Tab = "profile" | "company" | "team" | "permissions" | "notifications" | "security" | "preferences";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "profile", label: "Profile", icon: "◉" },
   { id: "company", label: "Company", icon: "◈" },
+  { id: "team", label: "Team", icon: "◆" },
+  { id: "permissions", label: "Permissions", icon: "⚙" },
   { id: "notifications", label: "Notifications", icon: "⚑" },
   { id: "security", label: "Security", icon: "🔒" },
   { id: "preferences", label: "Preferences", icon: "✦" }
@@ -36,26 +47,77 @@ export function Settings({ data, reload }: SettingsProps) {
   });
   const [company, setCompany] = useState<Company>(data.company || {});
   const [security, setSecurity] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
-  const [notifications, setNotifications] = useState({
-    invoiceReminders: true,
-    paymentReceived: true,
-    overdueAlerts: true,
-    weeklyDigest: false,
-    productUpdates: false,
-    emailMarketing: false
-  });
+
+  const initialPrefs = data.preferences || DEFAULT_PREFERENCES;
+  const [notifications, setNotifications] = useState<NotificationPrefs>(initialPrefs.notifications);
   const [preferences, setPreferences] = useState({
-    theme: "light",
-    language: "English",
-    dateFormat: "DD MMM YYYY",
-    twoFactor: false,
-    autoBackup: true
+    theme: initialPrefs.theme,
+    language: initialPrefs.language,
+    dateFormat: initialPrefs.dateFormat,
+    autoBackup: initialPrefs.autoBackup,
+    twoFactor: false
   });
+  const [companyBusy, setCompanyBusy] = useState(false);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
+  const [preferencesBusy, setPreferencesBusy] = useState(false);
 
   async function saveCompany(event: React.FormEvent) {
     event.preventDefault();
-    await api("/api/company", { method: "PATCH", body: JSON.stringify(company) });
-    reload();
+    setCompanyBusy(true);
+    try {
+      await api("/api/company", {
+        method: "PATCH",
+        body: JSON.stringify(company),
+        successMessage: "Company settings saved"
+      });
+      reload();
+    } finally {
+      setCompanyBusy(false);
+    }
+  }
+
+  async function saveNotifications() {
+    setNotificationsBusy(true);
+    try {
+      await api("/api/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({ notifications }),
+        successMessage: "Notification preferences saved"
+      });
+      reload();
+    } finally {
+      setNotificationsBusy(false);
+    }
+  }
+
+  async function savePreferences() {
+    setPreferencesBusy(true);
+    try {
+      await api("/api/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({
+          theme: preferences.theme,
+          language: preferences.language,
+          dateFormat: preferences.dateFormat,
+          autoBackup: preferences.autoBackup
+        }),
+        successMessage: "Preferences saved"
+      });
+      if (company.defaultCurrency && company.defaultCurrency !== data.company?.defaultCurrency) {
+        await api("/api/company", {
+          method: "PATCH",
+          body: JSON.stringify({ defaultCurrency: company.defaultCurrency }),
+          silent: true
+        });
+      }
+      reload();
+    } finally {
+      setPreferencesBusy(false);
+    }
+  }
+
+  function resetNotifications() {
+    setNotifications(initialPrefs.notifications);
   }
 
   return (
@@ -127,6 +189,7 @@ export function Settings({ data, reload }: SettingsProps) {
                   <Button type="submit">Save profile</Button>
                 </div>
               </form>
+              <p className="mt-3 text-xs text-slate-400">Profile name/email/role are managed via Clerk for now — connect a profile API if you need server persistence.</p>
             </Panel>
           ) : null}
 
@@ -146,11 +209,27 @@ export function Settings({ data, reload }: SettingsProps) {
                 <Input label="Tax ID" value={company.taxId} onChange={(taxId) => setCompany({ ...company, taxId })} />
                 <Input label="Fiscal year start" value={company.fiscalYearStartMonth} onChange={(fiscalYearStartMonth) => setCompany({ ...company, fiscalYearStartMonth })} />
                 <div className="col-span-full mt-2 flex justify-end gap-2">
-                  <Button variant="secondary" type="button">Discard</Button>
-                  <Button type="submit">Save company</Button>
+                  <Button variant="secondary" type="button" onClick={() => setCompany(data.company || {})} disabled={companyBusy}>Discard</Button>
+                  <Button type="submit" loading={companyBusy}>Save company</Button>
                 </div>
               </form>
             </Panel>
+          ) : null}
+
+          {tab === "team" ? (
+            <TeamTab
+              members={data.members || []}
+              currentMember={data.currentMember}
+              reload={reload}
+            />
+          ) : null}
+
+          {tab === "permissions" ? (
+            <PermissionsTab
+              permissions={data.permissions}
+              currentMember={data.currentMember}
+              reload={reload}
+            />
           ) : null}
 
           {tab === "notifications" ? (
@@ -198,8 +277,8 @@ export function Settings({ data, reload }: SettingsProps) {
                 />
               </div>
               <div className="mt-5 flex justify-end gap-2">
-                <Button variant="secondary" type="button">Reset</Button>
-                <Button type="button">Save preferences</Button>
+                <Button variant="secondary" type="button" onClick={resetNotifications} disabled={notificationsBusy}>Reset</Button>
+                <Button type="button" onClick={saveNotifications} loading={notificationsBusy}>Save preferences</Button>
               </div>
             </Panel>
           ) : null}
@@ -209,7 +288,7 @@ export function Settings({ data, reload }: SettingsProps) {
               <Panel>
                 <div className="mb-5">
                   <h3 className="text-base font-bold text-slate-900">Change password</h3>
-                  <p className="mt-0.5 text-sm text-slate-500">Keep your account secure with a strong password</p>
+                  <p className="mt-0.5 text-sm text-slate-500">Password changes are handled by Clerk — open your account portal to update.</p>
                 </div>
                 <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => event.preventDefault()}>
                   <div className="col-span-full">
@@ -218,7 +297,7 @@ export function Settings({ data, reload }: SettingsProps) {
                   <Input label="New password" type="password" value={security.newPassword} onChange={(newPassword) => setSecurity({ ...security, newPassword })} />
                   <Input label="Confirm new password" type="password" value={security.confirmPassword} onChange={(confirmPassword) => setSecurity({ ...security, confirmPassword })} />
                   <div className="col-span-full mt-2 flex justify-end">
-                    <Button type="submit">Update password</Button>
+                    <Button type="submit" disabled>Update password</Button>
                   </div>
                 </form>
               </Panel>
@@ -227,7 +306,7 @@ export function Settings({ data, reload }: SettingsProps) {
                 <div className="mb-5 flex items-start justify-between gap-4">
                   <div>
                     <h3 className="text-base font-bold text-slate-900">Two-factor authentication</h3>
-                    <p className="mt-0.5 text-sm text-slate-500">Add an extra layer of protection to your account</p>
+                    <p className="mt-0.5 text-sm text-slate-500">Add an extra layer of protection to your account (managed by Clerk)</p>
                   </div>
                   <Badge tone={preferences.twoFactor ? "low" : "neutral"}>{preferences.twoFactor ? "Enabled" : "Disabled"}</Badge>
                 </div>
@@ -276,8 +355,16 @@ export function Settings({ data, reload }: SettingsProps) {
                 />
               </div>
               <div className="mt-5 flex justify-end gap-2">
-                <Button variant="secondary" type="button">Discard</Button>
-                <Button type="button">Save preferences</Button>
+                <Button variant="secondary" type="button" onClick={() => {
+                  setPreferences({
+                    theme: initialPrefs.theme,
+                    language: initialPrefs.language,
+                    dateFormat: initialPrefs.dateFormat,
+                    autoBackup: initialPrefs.autoBackup,
+                    twoFactor: false
+                  });
+                }} disabled={preferencesBusy}>Discard</Button>
+                <Button type="button" onClick={savePreferences} loading={preferencesBusy}>Save preferences</Button>
               </div>
             </Panel>
           ) : null}

@@ -9,25 +9,35 @@ interface DataTableProps<T> {
   columns: Column<T>[];
   rows: (T & { _key?: string | number })[];
   empty?: string;
+  zebra?: boolean;
+  density?: "comfortable" | "compact";
 }
 
-export function DataTable<T>({ columns, rows, empty = "No records yet" }: DataTableProps<T>) {
+export function DataTable<T>({
+  columns,
+  rows,
+  empty = "No records yet",
+  zebra = true,
+  density = "comfortable"
+}: DataTableProps<T>) {
   if (!rows.length) {
     return <EmptyState text={empty} />;
   }
 
+  const cellPad = density === "compact" ? "px-3 py-2" : "px-4 py-3.5";
+
   return (
     <Fragment>
       {/* Desktop table */}
-      <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
+      <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-card">
         <table className="w-full border-collapse text-sm">
-          <thead>
+          <thead className="sticky top-0 z-[1] bg-slate-50/95 backdrop-blur">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column.key}
                   className={clsx(
-                    "border-b border-slate-200 bg-slate-50 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap",
+                    "border-b border-slate-200 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap",
                     column.align === "right" ? "text-right" : "text-left"
                   )}
                 >
@@ -38,12 +48,19 @@ export function DataTable<T>({ columns, rows, empty = "No records yet" }: DataTa
           </thead>
           <tbody>
             {rows.map((row, index) => (
-              <tr key={row._key ?? index} className="border-b border-slate-200 last:border-b-0 hover:bg-slate-50 transition">
+              <tr
+                key={row._key ?? index}
+                className={clsx(
+                  "border-b border-slate-100 last:border-b-0 transition hover:bg-brand-50/50",
+                  zebra && index % 2 === 1 ? "bg-slate-50/40" : ""
+                )}
+              >
                 {columns.map((column) => (
                   <td
                     key={column.key}
                     className={clsx(
-                      "px-4 py-3.5 align-middle",
+                      cellPad,
+                      "align-middle",
                       column.align === "right" ? "text-right" : "text-left"
                     )}
                   >

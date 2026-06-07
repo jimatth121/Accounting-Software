@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Panel } from "@/components/Panel";
 import { api } from "@/lib/api";
 import type { AppData } from "@/lib/types";
+import { clsx } from "@/lib/utils";
 
 interface AIAssistantProps {
   data: AppData;
@@ -24,16 +26,25 @@ export function AIAssistant({ data }: AIAssistantProps) {
     }
   ]);
 
+  const [busy, setBusy] = useState(false);
+
   async function ask(event: React.FormEvent) {
     event.preventDefault();
+    if (!question.trim() || busy) return;
     const userMessage: Message = { role: "user", content: question };
     setMessages((current) => [...current, userMessage]);
-    const result = await api<{ answer: string }>("/api/ai/chat", {
-      method: "POST",
-      body: JSON.stringify({ question })
-    });
-    setMessages((current) => [...current, { role: "assistant", content: result.answer }]);
-    setQuestion("");
+    setBusy(true);
+    try {
+      const result = await api<{ answer: string }>("/api/ai/chat", {
+        method: "POST",
+        body: JSON.stringify({ question }),
+        silent: true
+      });
+      setMessages((current) => [...current, { role: "assistant", content: result.answer }]);
+      setQuestion("");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const suggestions = useMemo(
@@ -89,9 +100,14 @@ export function AIAssistant({ data }: AIAssistantProps) {
         />
         <button
           type="submit"
-          className="min-h-[42px] rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_4px_12px_rgba(99,102,241,0.3)] transition hover:-translate-y-px hover:shadow-[0_6px_18px_rgba(99,102,241,0.45)]"
+          disabled={busy}
+          className={clsx(
+            "inline-flex items-center justify-center gap-1.5 min-h-[42px] rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_4px_12px_rgba(99,102,241,0.3)] transition",
+            busy ? "cursor-not-allowed opacity-60" : "hover:-translate-y-px hover:shadow-[0_6px_18px_rgba(99,102,241,0.45)]"
+          )}
         >
-          Ask AI
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {busy ? "Thinking…" : "Ask AI"}
         </button>
       </form>
 
