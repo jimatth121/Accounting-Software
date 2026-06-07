@@ -48,6 +48,14 @@ export function TeamTab({ members, currentMember, reload }: TeamTabProps) {
 
   async function invite(event: React.FormEvent) {
     event.preventDefault();
+    if (!form.email.trim()) {
+      toast.warning("Email is required");
+      return;
+    }
+    if (!form.role || form.role === "Administrator") {
+      toast.warning("Pick a role for this member");
+      return;
+    }
     setInviteBusy(true);
     try {
       const result = await api<InvitationResult>("/api/members", {
@@ -160,7 +168,7 @@ export function TeamTab({ members, currentMember, reload }: TeamTabProps) {
           <Input label="Full name" value={form.name} onChange={(name) => setForm({ ...form, name })} placeholder="Jane Doe" />
           <Input label="Email" type="email" required value={form.email} onChange={(email) => setForm({ ...form, email })} placeholder="jane@company.com" />
           <Select
-            label="Role"
+            label="Role (required)"
             value={form.role}
             onChange={(role) => setForm({ ...form, role })}
             options={ROLES.filter((role) => role !== "Administrator")}

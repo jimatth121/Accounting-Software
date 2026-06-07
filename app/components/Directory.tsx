@@ -1,27 +1,34 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/Button";
 import { DataTable } from "@/components/DataTable";
 import { Input } from "@/components/forms/Input";
 import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
+import { Pagination } from "@/components/Pagination";
 import { Panel } from "@/components/Panel";
 import { TableToolbar } from "@/components/TableToolbar";
 import { api } from "@/lib/api";
+import { useCan } from "@/lib/permissions";
+import { useDebounced, usePaginatedTable } from "@/lib/usePaginatedTable";
 import type { Column, Party } from "@/lib/types";
 
 interface DirectoryProps {
   title: string;
   singular: string;
   endpoint: string;
+  module: string;
   records: Party[];
   reload: () => void;
 }
 
 const blank = { name: "", companyName: "", email: "", phone: "", address: "", taxId: "", notes: "" };
 
-export function Directory({ title, singular, endpoint, records, reload }: DirectoryProps) {
+export function Directory({ title, singular, endpoint, module, records, reload }: DirectoryProps) {
+  const can = useCan();
+  const canWrite = can(module, "write");
+  const canDelete = can(module, "delete");
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState<Party | null>(null);
@@ -30,14 +37,16 @@ export function Directory({ title, singular, endpoint, records, reload }: Direct
   const [editBusy, setEditBusy] = useState(false);
   const [busyRow, setBusyRow] = useState<string>("");
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return records;
-    return records.filter((row) => {
-      const blob = `${row.name} ${row.companyName || ""} ${row.email || ""} ${row.phone || ""} ${row.address || ""} ${row.taxId || ""}`.toLowerCase();
-      return blob.includes(term);
-    });
-  }, [records, search]);
+  const debouncedSearch = useDebounced(search);
+  const { rows, meta, page, setPage, loading, refetch } = usePaginatedTable<Party>(endpoint, {
+    search: debouncedSearch
+  });
+
+  // Refresh both the bootstrap data (header counts / dropdowns) and the table.
+  const refresh = useCallback(() => {
+    reload();
+    refetch();
+  }, [reload, refetch]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -51,7 +60,7 @@ export function Directory({ title, singular, endpoint, records, reload }: Direct
       });
       setForm(blank);
       setCreateOpen(false);
-      reload();
+      refresh();
     } finally {
       setCreateBusy(false);
     }
@@ -77,7 +86,7 @@ export function Directory({ title, singular, endpoint, records, reload }: Direct
         successDetail: editing.name
       });
       setEditing(null);
-      reload();
+      refresh();
     } finally {
       setEditBusy(false);
     }
@@ -92,7 +101,7 @@ export function Directory({ title, singular, endpoint, records, reload }: Direct
         successMessage: `${singular[0].toUpperCase()}${singular.slice(1)} deleted`,
         successDetail: name
       });
-      reload();
+      refresh();
     } finally {
       setBusyRow("");
     }
@@ -109,15 +118,17 @@ export function Directory({ title, singular, endpoint, records, reload }: Direct
       label: "",
       render: (row) => (
         <div className="inline-flex gap-2">
-          <Button variant="small" type="button" onClick={() => setEditing(row)}>Edit</Button>
-          <Button
-            variant="smallDanger"
-            type="button"
-            loading={busyRow === `${row.id}:delete`}
-            onClick={() => remove(row.id, row.name)}
-          >
-            Delete
-          </Button>
+          {canWrite ? <Button variant="small" type="button" onClick={() => setEditing(row)}>Edit</Button> : null}
+          {canDelete ? (
+            <Button
+              variant="smallDanger"
+              type="button"
+              loading={busyRow === `${row.id}:delete`}
+              onClick={() => remove(row.id, row.name)}
+            >
+              Delete
+            </Button>
+          ) : null}
         </div>
       )
     }
@@ -133,16 +144,24 @@ export function Directory({ title, singular, endpoint, records, reload }: Direct
         subtitle={`Manage your ${title.toLowerCase()}`}
         count={records.length}
         actionLabel={`Add ${singular}`}
-        onAction={() => setCreateOpen(true)}
+        onAction={canWrite ? () => setCreateOpen(true) : undefined}
       />
       <TableToolbar
         search={search}
         onSearchChange={setSearch}
         placeholder={`Search ${title.toLowerCase()} by name, email, phone…`}
-        resultCount={filtered.length}
+        resultCount={meta.total}
         totalCount={records.length}
       />
-      <DataTable columns={columns} rows={filtered.map((row) => ({ ...row, _key: row.id || row.name }))} empty={`No ${title.toLowerCase()} match the current filters.`} />
+      <DataTable columns={columns} rows={rows.map((row) => ({ ...row, _key: row.id || row.name }))} empty={`No ${title.toLowerCase()} match the current filters.`} />
+      <Pagination
+        page={page}
+        totalPages={meta.totalPages}
+        total={meta.total}
+        pageSize={meta.pageSize}
+        onPageChange={setPage}
+        loading={loading}
+      />
 
       <Modal
         open={createOpen}

@@ -187,6 +187,15 @@ export interface InvitationResult {
   clerkConfigured: boolean;
 }
 
+export interface Paginated<T> {
+  data: T[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
 export interface AppData {
   company: Company | null;
   customers: Party[];

@@ -1,6 +1,7 @@
 "use client";
 
 import { NAV_ITEMS } from "@/lib/constants";
+import { useCan } from "@/lib/permissions";
 import type { NavLabel } from "@/lib/types";
 import { clsx } from "@/lib/utils";
 
@@ -13,6 +14,9 @@ interface SidebarProps {
 }
 
 export function Sidebar({ active, onSelect, open, onClose, companyName }: SidebarProps) {
+  const can = useCan();
+  // Only show modules this member can view (Dashboard is always available).
+  const navItems = NAV_ITEMS.filter((item) => item.label === "Dashboard" || can(item.label, "read"));
   return (
     <>
       <aside
@@ -34,7 +38,7 @@ export function Sidebar({ active, onSelect, open, onClose, companyName }: Sideba
         </div>
 
         <nav className="grid gap-1">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const isActive = active === item.label;
             const Icon = item.icon;
             return (

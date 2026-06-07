@@ -14,6 +14,7 @@ export function Customers({ data, reload }: CustomersProps) {
       title="Customers"
       singular="customer"
       endpoint="/api/customers"
+      module="Customers"
       records={data.customers}
       reload={reload}
     />

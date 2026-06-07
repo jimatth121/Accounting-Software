@@ -1,18 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { DataTable } from "@/components/DataTable";
 import { Input } from "@/components/forms/Input";
 import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
+import { Pagination } from "@/components/Pagination";
 import { Panel } from "@/components/Panel";
 import { Select } from "@/components/forms/Select";
 import { DocumentView, type DocPayload } from "@/components/DocumentView";
 import { TableToolbar } from "@/components/TableToolbar";
 import { DatePicker } from "@/components/forms/DatePicker";
 import { api } from "@/lib/api";
+import { useCan } from "@/lib/permissions";
+import { useDebounced, usePaginatedTable } from "@/lib/usePaginatedTable";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import type { Column, Company, Expense, Party } from "@/lib/types";
 import { formatDate, money } from "@/lib/utils";
@@ -36,6 +39,9 @@ interface Extraction {
 }
 
 export function Expenses({ data, reload, currency }: ExpensesProps) {
+  const can = useCan();
+  const canWrite = can("Expenses", "write");
+  const canDelete = can("Expenses", "delete");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     vendorId: data.vendors[0]?.id || "",
@@ -75,21 +81,20 @@ export function Expenses({ data, reload, currency }: ExpensesProps) {
     return Array.from(set);
   }, [data.expenses]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return data.expenses.filter((row) => {
-      if (categoryFilter !== "all" && row.category !== categoryFilter) return false;
-      if (vendorFilter !== "all" && row.vendorId !== vendorFilter) return false;
-      if (statusFilter !== "all" && row.status !== statusFilter) return false;
-      if (dateFrom && (row.expenseDate || "") < dateFrom) return false;
-      if (dateTo && (row.expenseDate || "") > dateTo) return false;
-      if (term) {
-        const blob = `${row.description || ""} ${row.vendorName || ""} ${row.category || ""} ${row.paymentMethod || ""}`.toLowerCase();
-        if (!blob.includes(term)) return false;
-      }
-      return true;
-    });
-  }, [data.expenses, search, categoryFilter, vendorFilter, statusFilter, dateFrom, dateTo]);
+  const debouncedSearch = useDebounced(search);
+  const { rows, meta, page, setPage, loading, refetch } = usePaginatedTable<Expense>("/api/expenses", {
+    search: debouncedSearch,
+    category: categoryFilter,
+    vendorId: vendorFilter,
+    status: statusFilter,
+    dateFrom,
+    dateTo
+  });
+
+  const refresh = useCallback(() => {
+    reload();
+    refetch();
+  }, [reload, refetch]);
 
   async function extractReceipt() {
     setExtractBusy(true);
@@ -128,7 +133,7 @@ export function Expenses({ data, reload, currency }: ExpensesProps) {
       });
       setExtraction(null);
       setOpen(false);
-      reload();
+      refresh();
     } finally {
       setCreateBusy(false);
     }
@@ -155,7 +160,7 @@ export function Expenses({ data, reload, currency }: ExpensesProps) {
         successDetail: editing.description
       });
       setEditing(null);
-      reload();
+      refresh();
     } finally {
       setEditBusy(false);
     }
@@ -170,7 +175,7 @@ export function Expenses({ data, reload, currency }: ExpensesProps) {
         successMessage: "Expense deleted",
         successDetail: description
       });
-      reload();
+      refresh();
     } finally {
       setBusyRow("");
     }
@@ -189,15 +194,17 @@ export function Expenses({ data, reload, currency }: ExpensesProps) {
       render: (row) => (
         <div className="inline-flex gap-2">
           <Button variant="small" type="button" onClick={() => setViewing({ kind: "expense", record: row })}>View</Button>
-          <Button variant="small" type="button" onClick={() => setEditing(row)}>Edit</Button>
-          <Button
-            variant="smallDanger"
-            type="button"
-            loading={busyRow === `${row.id}:delete`}
-            onClick={() => remove(row.id, row.description || row.vendorName || "")}
-          >
-            Delete
-          </Button>
+          {canWrite ? <Button variant="small" type="button" onClick={() => setEditing(row)}>Edit</Button> : null}
+          {canDelete ? (
+            <Button
+              variant="smallDanger"
+              type="button"
+              loading={busyRow === `${row.id}:delete`}
+              onClick={() => remove(row.id, row.description || row.vendorName || "")}
+            >
+              Delete
+            </Button>
+          ) : null}
         </div>
       )
     }
@@ -210,7 +217,7 @@ export function Expenses({ data, reload, currency }: ExpensesProps) {
         subtitle="Track business spending"
         count={data.expenses.length}
         actionLabel="Record expense"
-        onAction={() => setOpen(true)}
+        onAction={canWrite ? () => setOpen(true) : undefined}
       />
       <div className="mb-3 grid gap-3 sm:grid-cols-2">
         <DatePicker label="From date" value={dateFrom} onChange={setDateFrom} placeholder="Any start date" />
@@ -220,7 +227,7 @@ export function Expenses({ data, reload, currency }: ExpensesProps) {
         search={search}
         onSearchChange={setSearch}
         placeholder="Search description, vendor, category or method…"
-        resultCount={filtered.length}
+        resultCount={meta.total}
         totalCount={data.expenses.length}
         filters={[
           {
@@ -246,7 +253,15 @@ export function Expenses({ data, reload, currency }: ExpensesProps) {
           }
         ]}
       />
-      <DataTable columns={columns} rows={filtered.map((row) => ({ ...row, _key: row.id }))} empty="No expenses match the current filters." />
+      <DataTable columns={columns} rows={rows.map((row) => ({ ...row, _key: row.id }))} empty="No expenses match the current filters." />
+      <Pagination
+        page={page}
+        totalPages={meta.totalPages}
+        total={meta.total}
+        pageSize={meta.pageSize}
+        onPageChange={setPage}
+        loading={loading}
+      />
 
       <Modal
         open={open}

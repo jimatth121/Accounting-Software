@@ -8,6 +8,7 @@ import { Toaster } from "@/components/Toaster";
 import { Topbar } from "@/components/Topbar";
 import { api, setAuthContext } from "@/lib/api";
 import { EMPTY_STATE } from "@/lib/constants";
+import { PermissionProvider, makeCan } from "@/lib/permissions";
 import type { AppData, NavLabel } from "@/lib/types";
 import { AIAssistant } from "@/modules/ai-assistant/AIAssistant";
 import { Company } from "@/modules/company/Company";
@@ -63,6 +64,17 @@ export default function Home() {
 
   const currency = data.company?.defaultCurrency || "NGN";
 
+  // Dashboard & Settings are always reachable; other modules require read access.
+  const can = makeCan(data.currentMember, data.permissions);
+  const canView = (label: NavLabel) => label === "Dashboard" || label === "Settings" || can(label, "read");
+
+  // If the active module isn't permitted (role changed, or a Viewer deep-linked),
+  // fall back to the Dashboard.
+  useEffect(() => {
+    if (!loading && !canView(active)) setActive("Dashboard");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, active, data.currentMember, data.permissions]);
+
   if (!isLoaded || !isSignedIn) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50">
@@ -75,43 +87,49 @@ export default function Home() {
   }
 
   return (
-    <main className="md:flex md:h-screen md:overflow-hidden">
-      <Toaster />
-      <div className="md:w-[260px] md:h-full md:shrink-0">
-        <Sidebar
-          active={active}
-          onSelect={setActive}
-          open={navOpen}
-          onClose={() => setNavOpen(false)}
-          companyName={data.company?.name}
-        />
-      </div>
+    <PermissionProvider currentMember={data.currentMember} permissions={data.permissions}>
+      <main className="md:flex md:h-screen md:overflow-hidden">
+        <Toaster />
+        <div className="md:w-[260px] md:h-full md:shrink-0">
+          <Sidebar
+            active={active}
+            onSelect={setActive}
+            open={navOpen}
+            onClose={() => setNavOpen(false)}
+            companyName={data.company?.name}
+          />
+        </div>
 
-      <section className="grid content-start gap-5 px-4 py-5 md:px-7 md:py-6 min-w-0 md:flex-1 md:overflow-y-auto">
-        <Topbar
-          section={active}
-          companyName={data.company?.name}
-          onMenuClick={() => setNavOpen(!navOpen)}
-          onSettings={() => setActive("Settings")}
-          notificationCount={data.anomalies.length}
-        />
+        <section className="grid content-start gap-5 px-4 py-5 md:px-7 md:py-6 min-w-0 md:flex-1 md:overflow-y-auto">
+          <Topbar
+            section={active}
+            companyName={data.company?.name}
+            onMenuClick={() => setNavOpen(!navOpen)}
+            onSettings={() => setActive("Settings")}
+            notificationCount={data.anomalies.length}
+          />
 
-        {error ? <Notice>{error}</Notice> : null}
-        {loading ? <Notice tone="info">Loading SmartBooks AI...</Notice> : null}
+          {error ? <Notice>{error}</Notice> : null}
+          {loading ? <Notice tone="info">Loading SmartBooks AI...</Notice> : null}
 
-        {!loading && active === "Dashboard" ? <Dashboard data={data} currency={currency} reload={loadData} /> : null}
-        {!loading && active === "Company" ? <Company data={data} reload={loadData} /> : null}
-        {!loading && active === "Customers" ? <Customers data={data} reload={loadData} /> : null}
-        {!loading && active === "Vendors" ? <Vendors data={data} reload={loadData} /> : null}
-        {!loading && active === "Invoices" ? <Invoices data={data} reload={loadData} /> : null}
-        {!loading && active === "Expenses" ? <Expenses data={data} reload={loadData} currency={currency} /> : null}
-        {!loading && active === "Payments" ? <Payments data={data} reload={loadData} currency={currency} /> : null}
-        {!loading && active === "Inventory" ? <Inventory data={data} reload={loadData} currency={currency} /> : null}
-        {!loading && active === "Ledger" ? <Ledger data={data} currency={currency} /> : null}
-        {!loading && active === "Reports" ? <Reports data={data} currency={currency} /> : null}
-        {!loading && active === "AI Assistant" ? <AIAssistant data={data} /> : null}
-        {!loading && active === "Settings" ? <Settings data={data} reload={loadData} /> : null}
-      </section>
-    </main>
+          {!loading && !canView(active) ? (
+            <Notice>You don&rsquo;t have permission to view {active}. Ask an administrator for access.</Notice>
+          ) : null}
+
+          {!loading && active === "Dashboard" ? <Dashboard data={data} currency={currency} reload={loadData} /> : null}
+          {!loading && active === "Company" && canView("Company") ? <Company data={data} reload={loadData} /> : null}
+          {!loading && active === "Customers" && canView("Customers") ? <Customers data={data} reload={loadData} /> : null}
+          {!loading && active === "Vendors" && canView("Vendors") ? <Vendors data={data} reload={loadData} /> : null}
+          {!loading && active === "Invoices" && canView("Invoices") ? <Invoices data={data} reload={loadData} /> : null}
+          {!loading && active === "Expenses" && canView("Expenses") ? <Expenses data={data} reload={loadData} currency={currency} /> : null}
+          {!loading && active === "Payments" && canView("Payments") ? <Payments data={data} reload={loadData} currency={currency} /> : null}
+          {!loading && active === "Inventory" && canView("Inventory") ? <Inventory data={data} reload={loadData} currency={currency} /> : null}
+          {!loading && active === "Ledger" && canView("Ledger") ? <Ledger data={data} currency={currency} /> : null}
+          {!loading && active === "Reports" && canView("Reports") ? <Reports data={data} currency={currency} /> : null}
+          {!loading && active === "AI Assistant" && canView("AI Assistant") ? <AIAssistant data={data} /> : null}
+          {!loading && active === "Settings" ? <Settings data={data} reload={loadData} /> : null}
+        </section>
+      </main>
+    </PermissionProvider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { AlertTriangle, ArrowUpRight, Banknote, Package } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
@@ -9,10 +9,13 @@ import { Input } from "@/components/forms/Input";
 import { MetricCard } from "@/components/MetricCard";
 import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
+import { Pagination } from "@/components/Pagination";
 import { Panel } from "@/components/Panel";
 import { Select } from "@/components/forms/Select";
 import { TableToolbar } from "@/components/TableToolbar";
 import { api } from "@/lib/api";
+import { useCan } from "@/lib/permissions";
+import { useDebounced, usePaginatedTable } from "@/lib/usePaginatedTable";
 import { INVENTORY_CATEGORIES } from "@/lib/constants";
 import type { Column, InventoryItem } from "@/lib/types";
 import { money } from "@/lib/utils";
@@ -34,6 +37,9 @@ const blank = {
 };
 
 export function Inventory({ data, reload, currency }: InventoryProps) {
+  const can = useCan();
+  const canWrite = can("Inventory", "write");
+  const canDelete = can("Inventory", "delete");
   const inventory = data.inventory || [];
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
@@ -45,6 +51,19 @@ export function Inventory({ data, reload, currency }: InventoryProps) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [stockFilter, setStockFilter] = useState("all");
+
+  const debouncedSearch = useDebounced(search);
+  const { rows, meta, page, setPage, loading, refetch } = usePaginatedTable<InventoryItem>("/api/inventory", {
+    search: debouncedSearch,
+    category: categoryFilter,
+    stock: stockFilter
+  });
+
+  // Metric cards use the full bootstrap list; only the table is paginated.
+  const refresh = useCallback(() => {
+    reload();
+    refetch();
+  }, [reload, refetch]);
 
   async function addItem(event: React.FormEvent) {
     event.preventDefault();
@@ -59,7 +78,7 @@ export function Inventory({ data, reload, currency }: InventoryProps) {
       });
       setForm(blank);
       setCreateOpen(false);
-      reload();
+      refresh();
     } finally {
       setCreateBusy(false);
     }
@@ -85,7 +104,7 @@ export function Inventory({ data, reload, currency }: InventoryProps) {
         successDetail: editing.name
       });
       setEditing(null);
-      reload();
+      refresh();
     } finally {
       setEditBusy(false);
     }
@@ -99,7 +118,7 @@ export function Inventory({ data, reload, currency }: InventoryProps) {
         body: JSON.stringify({ delta }),
         silent: true
       });
-      reload();
+      refresh();
     } finally {
       setBusyRow("");
     }
@@ -114,26 +133,11 @@ export function Inventory({ data, reload, currency }: InventoryProps) {
         successMessage: "Item removed",
         successDetail: name
       });
-      reload();
+      refresh();
     } finally {
       setBusyRow("");
     }
   }
-
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return inventory.filter((item) => {
-      if (categoryFilter !== "all" && item.category !== categoryFilter) return false;
-      if (stockFilter === "low" && item.quantity > item.reorderLevel) return false;
-      if (stockFilter === "out" && item.quantity > 0) return false;
-      if (stockFilter === "ok" && item.quantity <= item.reorderLevel) return false;
-      if (term) {
-        const blob = `${item.sku} ${item.name} ${item.category}`.toLowerCase();
-        if (!blob.includes(term)) return false;
-      }
-      return true;
-    });
-  }, [inventory, search, categoryFilter, stockFilter]);
 
   const totalValue = inventory.reduce((sum, item) => sum + item.unitCost * item.quantity, 0);
   const totalRetail = inventory.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
@@ -151,26 +155,30 @@ export function Inventory({ data, reload, currency }: InventoryProps) {
         const isLow = row.quantity <= row.reorderLevel;
         return (
           <div className="inline-flex items-center gap-2">
-            <Button
-              variant="small"
-              type="button"
-              onClick={() => adjustQty(row.id, -1)}
-              loading={busyRow === `${row.id}:adjust:-1`}
-              disabled={row.quantity === 0}
-              className="!min-h-[28px] !min-w-[28px] !px-2"
-            >
-              {busyRow === `${row.id}:adjust:-1` ? "" : "−"}
-            </Button>
+            {canWrite ? (
+              <Button
+                variant="small"
+                type="button"
+                onClick={() => adjustQty(row.id, -1)}
+                loading={busyRow === `${row.id}:adjust:-1`}
+                disabled={row.quantity === 0}
+                className="!min-h-[28px] !min-w-[28px] !px-2"
+              >
+                {busyRow === `${row.id}:adjust:-1` ? "" : "−"}
+              </Button>
+            ) : null}
             <span className={isLow ? "font-bold text-rose-600 tabular-nums" : "tabular-nums"}>{row.quantity}</span>
-            <Button
-              variant="small"
-              type="button"
-              onClick={() => adjustQty(row.id, 1)}
-              loading={busyRow === `${row.id}:adjust:1`}
-              className="!min-h-[28px] !min-w-[28px] !px-2"
-            >
-              {busyRow === `${row.id}:adjust:1` ? "" : "+"}
-            </Button>
+            {canWrite ? (
+              <Button
+                variant="small"
+                type="button"
+                onClick={() => adjustQty(row.id, 1)}
+                loading={busyRow === `${row.id}:adjust:1`}
+                className="!min-h-[28px] !min-w-[28px] !px-2"
+              >
+                {busyRow === `${row.id}:adjust:1` ? "" : "+"}
+              </Button>
+            ) : null}
           </div>
         );
       }
@@ -182,15 +190,17 @@ export function Inventory({ data, reload, currency }: InventoryProps) {
       label: "",
       render: (row) => (
         <div className="inline-flex gap-2">
-          <Button variant="small" type="button" onClick={() => setEditing(row)}>Edit</Button>
-          <Button
-            variant="smallDanger"
-            type="button"
-            onClick={() => removeItem(row.id, row.name)}
-            loading={busyRow === `${row.id}:delete`}
-          >
-            Remove
-          </Button>
+          {canWrite ? <Button variant="small" type="button" onClick={() => setEditing(row)}>Edit</Button> : null}
+          {canDelete ? (
+            <Button
+              variant="smallDanger"
+              type="button"
+              onClick={() => removeItem(row.id, row.name)}
+              loading={busyRow === `${row.id}:delete`}
+            >
+              Remove
+            </Button>
+          ) : null}
         </div>
       )
     }
@@ -211,13 +221,13 @@ export function Inventory({ data, reload, currency }: InventoryProps) {
           subtitle="Manage stock and pricing"
           count={inventory.length}
           actionLabel="Add item"
-          onAction={() => setCreateOpen(true)}
+          onAction={canWrite ? () => setCreateOpen(true) : undefined}
         />
         <TableToolbar
           search={search}
           onSearchChange={setSearch}
           placeholder="Search SKU, name or category…"
-          resultCount={filtered.length}
+          resultCount={meta.total}
           totalCount={inventory.length}
           filters={[
             {
@@ -242,8 +252,16 @@ export function Inventory({ data, reload, currency }: InventoryProps) {
         />
         <DataTable
           columns={columns}
-          rows={filtered.map((row) => ({ ...row, _key: row.id }))}
+          rows={rows.map((row) => ({ ...row, _key: row.id }))}
           empty="No inventory items match the current filters."
+        />
+        <Pagination
+          page={page}
+          totalPages={meta.totalPages}
+          total={meta.total}
+          pageSize={meta.pageSize}
+          onPageChange={setPage}
+          loading={loading}
         />
       </Panel>
 

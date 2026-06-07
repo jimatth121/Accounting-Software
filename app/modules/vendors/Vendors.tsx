@@ -14,6 +14,7 @@ export function Vendors({ data, reload }: VendorsProps) {
       title="Vendors"
       singular="vendor"
       endpoint="/api/vendors"
+      module="Vendors"
       records={data.vendors}
       reload={reload}
     />

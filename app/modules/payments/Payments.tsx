@@ -1,18 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { DataTable } from "@/components/DataTable";
 import { Input } from "@/components/forms/Input";
 import { Modal } from "@/components/Modal";
 import { PageHeader } from "@/components/PageHeader";
+import { Pagination } from "@/components/Pagination";
 import { Panel } from "@/components/Panel";
 import { Select } from "@/components/forms/Select";
 import { DocumentView, type DocPayload } from "@/components/DocumentView";
 import { TableToolbar } from "@/components/TableToolbar";
 import { DatePicker } from "@/components/forms/DatePicker";
 import { api } from "@/lib/api";
+import { useCan } from "@/lib/permissions";
+import { useDebounced, usePaginatedTable } from "@/lib/usePaginatedTable";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import type { Column, Company, Invoice, Payment } from "@/lib/types";
 import { formatDate, money } from "@/lib/utils";
@@ -24,6 +27,9 @@ interface PaymentsProps {
 }
 
 export function Payments({ data, reload, currency }: PaymentsProps) {
+  const can = useCan();
+  const canWrite = can("Payments", "write");
+  const canDelete = can("Payments", "delete");
   const [open, setOpen] = useState(false);
   const [viewing, setViewing] = useState<DocPayload | null>(null);
   const [form, setForm] = useState({
@@ -45,21 +51,19 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return data.payments.filter((row) => {
-      if (typeFilter !== "all" && row.paymentType !== typeFilter) return false;
-      if (methodFilter !== "all" && row.paymentMethod !== methodFilter) return false;
-      const when = row.paymentDate || row.createdAt || "";
-      if (dateFrom && when < dateFrom) return false;
-      if (dateTo && when > dateTo) return false;
-      if (term) {
-        const blob = `${row.reference || ""} ${row.notes || ""} ${row.paymentMethod || ""}`.toLowerCase();
-        if (!blob.includes(term)) return false;
-      }
-      return true;
-    });
-  }, [data.payments, search, typeFilter, methodFilter, dateFrom, dateTo]);
+  const debouncedSearch = useDebounced(search);
+  const { rows, meta, page, setPage, loading, refetch } = usePaginatedTable<Payment>("/api/payments", {
+    search: debouncedSearch,
+    paymentType: typeFilter,
+    paymentMethod: methodFilter,
+    dateFrom,
+    dateTo
+  });
+
+  const refresh = useCallback(() => {
+    reload();
+    refetch();
+  }, [reload, refetch]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -79,7 +83,7 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
         });
       }
       setOpen(false);
-      reload();
+      refresh();
     } finally {
       setCreateBusy(false);
     }
@@ -103,7 +107,7 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
         successDetail: editing.reference || undefined
       });
       setEditing(null);
-      reload();
+      refresh();
     } finally {
       setEditBusy(false);
     }
@@ -118,7 +122,7 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
         successMessage: "Payment deleted",
         successDetail: reference || undefined
       });
-      reload();
+      refresh();
     } finally {
       setBusyRow("");
     }
@@ -147,15 +151,17 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
           >
             View
           </Button>
-          <Button variant="small" type="button" onClick={() => setEditing(row)}>Edit</Button>
-          <Button
-            variant="smallDanger"
-            type="button"
-            loading={busyRow === `${row.id}:delete`}
-            onClick={() => remove(row.id, row.reference || "")}
-          >
-            Delete
-          </Button>
+          {canWrite ? <Button variant="small" type="button" onClick={() => setEditing(row)}>Edit</Button> : null}
+          {canDelete ? (
+            <Button
+              variant="smallDanger"
+              type="button"
+              loading={busyRow === `${row.id}:delete`}
+              onClick={() => remove(row.id, row.reference || "")}
+            >
+              Delete
+            </Button>
+          ) : null}
         </div>
       )
     }
@@ -168,7 +174,7 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
         subtitle="Track incoming and outgoing payments"
         count={data.payments.length}
         actionLabel="Record payment"
-        onAction={() => setOpen(true)}
+        onAction={canWrite ? () => setOpen(true) : undefined}
       />
       <div className="mb-3 grid gap-3 sm:grid-cols-2">
         <DatePicker label="From date" value={dateFrom} onChange={setDateFrom} placeholder="Any start date" />
@@ -178,7 +184,7 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
         search={search}
         onSearchChange={setSearch}
         placeholder="Search reference, notes or method…"
-        resultCount={filtered.length}
+        resultCount={meta.total}
         totalCount={data.payments.length}
         filters={[
           {
@@ -200,7 +206,15 @@ export function Payments({ data, reload, currency }: PaymentsProps) {
           }
         ]}
       />
-      <DataTable columns={columns} rows={filtered.map((row) => ({ ...row, _key: row.id }))} empty="No payments match the current filters." />
+      <DataTable columns={columns} rows={rows.map((row) => ({ ...row, _key: row.id }))} empty="No payments match the current filters." />
+      <Pagination
+        page={page}
+        totalPages={meta.totalPages}
+        total={meta.total}
+        pageSize={meta.pageSize}
+        onPageChange={setPage}
+        loading={loading}
+      />
 
       <Modal
         open={open}
